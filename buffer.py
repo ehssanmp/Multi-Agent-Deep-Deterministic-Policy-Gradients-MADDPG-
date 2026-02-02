@@ -1,10 +1,5 @@
 import os
 import numpy as np
-import torch as T
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from pettingzoo.mpe import simple_adversary_v3
 
 
 class MultiAgentReplayBuffer:
