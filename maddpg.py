@@ -13,7 +13,7 @@ from buffer import MultiAgentReplayBuffer
 class MADDPG:
     def __init__(self, actor_dims, critic_dims, n_agents, n_actions,
                  scenario='simple', alpha=0.01, beta=0.01, fc1=64, fc2=64,
-                 gamma=0.99, tau=0.01, chkpt_dir='/maddpg'):
+                 gamma=0.99, tau=0.01, chkpt_dir='./maddpg'):
         
         self.agents: List[Agent] = []
         self.n_agents = n_agents
@@ -23,6 +23,7 @@ class MADDPG:
         for agent_idx in range(self.n_agents):
             self.agents.append(Agent(actor_dims=actor_dims[agent_idx], 
                                      critic_dims=critic_dims, n_actions=n_actions,
+                                     n_agents=n_agents,
                                      agent_idx=agent_idx, chkpt_dir=chkpt_dir,
                                      alpha=alpha, beta=beta, fc1=fc1, fc2=fc2,
                                      tau=tau))
@@ -38,11 +39,12 @@ class MADDPG:
         for agent in self.agents:
             agent.load_models()
             
-    def choose_action(self, raw_obs):
-        actions = []
+    def choose_action(self, raw_obs: dict):
+        actions = {}
+        agent_names = list(raw_obs.keys())
         for agent_idx, agent in enumerate(self.agents):
-            action = agent.choose_action(raw_obs[agent_idx])
-            actions.append(action)
+            action = agent.choose_action(raw_obs[agent_names[agent_idx]])
+            actions[agent_names[agent_idx]] = action
             
         return actions
     
@@ -57,7 +59,7 @@ class MADDPG:
         
         states = T.tensor(states, dtype=T.float).to(device)
         actions = T.tensor(actions, dtype=T.float).to(device)
-        rewards = T.tensor(rewards).to(device)
+        rewards = T.tensor(rewards, dtype=T.float).to(device)
         states_ = T.tensor(states_, dtype=T.float).to(device)
         dones = T.tensor(dones).to(device)
         
@@ -89,17 +91,17 @@ class MADDPG:
             critic_value_[dones[:, 0]] = 0.0
             critic_value = agent.critic.forward(states, old_actions).flatten()
             
-            target = rewards[:, agent_idx] + agent.gamma * critic_value_
+            target = rewards[:, agent_idx] + agent.gamma * critic_value_.detach()
             critic_loss = F.mse_loss(target, critic_value)
             agent.critic.optimizer.zero_grad()
-            critic_loss.backward(retain_graph=True)
+            critic_loss.backward()
             agent.critic.optimizer.step()
             
             
             actor_loss = agent.critic.forward(states, mu).flatten()
             actor_loss = - T.mean(actor_loss)
             agent.actor.optimizer.zero_grad()
-            actor_loss.backward(retain_graph=True)
+            actor_loss.backward()
             agent.actor.optimizer.step()
             
             agent.update_network_parameters()
